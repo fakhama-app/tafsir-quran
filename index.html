@@ -1201,13 +1201,11 @@ function renderStatusBar() {
   const upgradeBar = document.getElementById('upgrade-bar');
   if (appMode === 'offline') {
     bar.innerHTML = `
-      <div style="display:inline-flex;align-items:center;gap:12px;justify-content:center;">
-        <span class="offline-badge">
-          <span class="offline-dot"></span>
-          يعمل بدون إنترنت
-        </span>
-        <span onclick="confirmReload()" style="font-size:0.7rem;color:var(--text-m);cursor:pointer;opacity:0.55;transition:opacity 0.2s;white-space:nowrap;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.55">⟳ إعادة التحميل</span>
-      </div>`;
+      <span class="offline-badge">
+        <span class="offline-dot"></span>
+        يعمل بدون إنترنت
+      </span>
+      <span onclick="confirmReload()" style="display:inline-block;margin-right:10px;font-size:0.7rem;color:var(--text-m);cursor:pointer;opacity:0.55;vertical-align:middle;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.55">⟳ إعادة التحميل</span>`;
     upgradeBar.style.display = 'none';
   } else {
     bar.innerHTML = `
@@ -1581,29 +1579,41 @@ function getSearchWords(q) {
     .filter(w => w.length >= 2); // تجاهل الكلمات القصيرة جداً
 }
 
-// ═══ حساب نقاط التشابه بين نص الآية والاستعلام ═══
+// ═══ الكلمات الشائعة التي لا تُعطى وزناً ═══
+const COMMON_WORDS = new Set([
+  'من','في','على','إلى','عن','مع','هو','هي','هم','أن','إن',
+  'ما','لا','قد','كان','كل','لم','ثم','أو','و','ف','ب','ل',
+  'فأما','أما','وما','فما','قل','إذا','حتى','وهو','وهي',
+]);
+
+// ═══ حساب نقاط التشابه — مع تجاهل الكلمات الشائعة ═══
 function scoreMatch(ayahNorm, queryWords) {
   let score = 0;
-  let consecutive = 0;
   const ayahWords = ayahNorm.split(' ');
 
-  for (const qw of queryWords) {
-    // تطابق كامل للكلمة
-    if (ayahWords.includes(qw)) {
-      score += 3;
-      consecutive++;
-    }
-    // تطابق جزئي — الكلمة موجودة ضمن نص الآية
-    else if (ayahNorm.includes(qw)) {
-      score += 2;
-    }
-    // تطابق بالبداية — مفيد للمجرد والمزيد
-    else if (ayahWords.some(aw => aw.startsWith(qw) || qw.startsWith(aw))) {
-      score += 1;
-    }
+  // الكلمات ذات الوزن فقط (غير الشائعة)
+  const weightedWords = queryWords.filter(w => !COMMON_WORDS.has(w) && w.length >= 3);
+  // الكلمات الشائعة بوزن منخفض
+  const commonWords   = queryWords.filter(w => COMMON_WORDS.has(w) || w.length < 3);
+
+  // الكلمات ذات الوزن تحصل على نقاط أعلى بكثير
+  for (const qw of weightedWords) {
+    if (ayahWords.includes(qw)) score += 10;
+    else if (ayahNorm.includes(qw)) score += 6;
+    else if (ayahWords.some(aw => aw.startsWith(qw) || qw.startsWith(aw))) score += 3;
   }
-  // مكافأة إضافية إذا تعددت الكلمات المتطابقة
-  if (consecutive > 1) score += consecutive;
+
+  // الكلمات الشائعة نقاطها منخفضة — لا تؤثر كثيراً
+  for (const qw of commonWords) {
+    if (ayahWords.includes(qw)) score += 1;
+  }
+
+  // مكافأة: إذا تطابقت عدة كلمات مهمة معاً
+  const matchedWeighted = weightedWords.filter(qw =>
+    ayahWords.includes(qw) || ayahNorm.includes(qw)
+  ).length;
+  if (matchedWeighted >= 2) score += matchedWeighted * 3;
+
   return score;
 }
 
@@ -1643,16 +1653,23 @@ function searchExact(qNorm) {
 
 // بحث بأفضل تطابق بالكلمات (الخيار ب)
 function searchBestMatch(queryWords) {
+  // نحسب الكلمات ذات الوزن لتحديد الحد الأدنى
+  const weighted = queryWords.filter(w => !COMMON_WORDS.has(w) && w.length >= 3);
+  const minScore = Math.max(5, weighted.length * 6);
+
   return new Promise((resolve, reject) => {
     const tx  = db.transaction(STORE_AYAT, 'readonly');
     const req = tx.objectStore(STORE_AYAT).openCursor();
     let best = null;
     let bestScore = 0;
-    const minScore = Math.max(1, Math.floor(queryWords.length * 0.4));
 
     req.onsuccess = e => {
       const cursor = e.target.result;
-      if (!cursor) { resolve(best); return; }
+      if (!cursor) {
+        // إذا لم تتجاوز أفضل نتيجة الحد الأدنى → لا نتيجة
+        resolve(bestScore >= minScore ? best : null);
+        return;
+      }
       const ayahNorm = normalizeArabic(cursor.value.text);
       const score    = scoreMatch(ayahNorm, queryWords);
       if (score > bestScore) {
