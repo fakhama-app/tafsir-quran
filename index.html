@@ -976,6 +976,9 @@ body::before {
         ✦ لا يُفسَّر القرآن الكريم من عند البرنامج ✦<br>
         يُعرض فقط ما ثبت عن المفسرين المعتمدين في أمهات الكتب
       </div>
+      <div style="margin-top:16px;">
+        <span onclick="clearAllData()" style="font-size:0.68rem;color:#3a4455;cursor:pointer;transition:color 0.2s;" onmouseover="this.style.color='#f85149'" onmouseout="this.style.color='#3a4455'">مسح جميع البيانات المحفوظة</span>
+      </div>
       <div class="footer-source">
         بيانات التفاسير مستقاة من مشروع tafsir_api — المصدر: quran.com
       </div>
@@ -1316,7 +1319,7 @@ async function downloadQuranText() {
   // نستخدم alquran.cloud — بنية واضحة ونص عثماني موثوق
   // الشكل: { data: { ayahs: [{numberInSurah: N, text: '...'}] } }
   for (let s = 1; s <= 114; s++) {
-    setProgress(`جارٍ تحميل نصوص الآيات — سورة ${s} / 114`, (s / 114) * 2);
+    setProgress(`جارٍ تحميل إعدادات التشغيل — سورة ${s} / 114`, (s / 114) * 2);
     let records = [];
     try {
       const url = `https://api.alquran.cloud/v1/surah/${s}/quran-simple`;
@@ -1966,6 +1969,20 @@ async function confirmReload() {
   const tx = db.transaction(STORE_META, 'readwrite');
   tx.objectStore(STORE_META).delete('loaded');
   tx.oncomplete = () => location.reload();
+}
+
+// ═══════════════════════════════════════════
+//  CLEAR ALL DATA
+// ═══════════════════════════════════════════
+async function clearAllData() {
+  if (!confirm('سيتم مسح جميع البيانات المحفوظة بما فيها التفاسير والمفضلة وإعدادات التشغيل.\nهل أنت متأكد؟')) return;
+  // حذف قاعدة البيانات كاملة
+  const req = indexedDB.deleteDatabase(DB_NAME);
+  req.onsuccess = () => {
+    alert('تم مسح البيانات. سيتم إعادة تشغيل التطبيق.');
+    location.reload();
+  };
+  req.onerror = () => alert('حدث خطأ أثناء مسح البيانات.');
 }
 
 // ═══════════════════════════════════════════
