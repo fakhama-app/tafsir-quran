@@ -876,6 +876,7 @@ body::before {
         <span class="offline-dot"></span>
         يعمل بدون إنترنت
       </span>
+      <span onclick="confirmReload()" style="margin-right:10px;font-size:0.7rem;color:var(--text-m);cursor:pointer;text-decoration:underline;text-underline-offset:3px;">إعادة تحميل البيانات</span>
     </div>
 
     <!-- NAV TABS -->
@@ -1184,41 +1185,39 @@ async function startDownload() {
 }
 
 async function downloadQuranText() {
-  // تحميل نص القرآن سورة بسورة لتفادي حجب الملفات الكبيرة
-  // نستخدم النمط المجزأ من fawazahmed0/quran-api: /editions/{edition}/{surah}.json
-  const QURAN_EDITION = 'ara-qurankhaledhosn'; // نص عربي واضح بدون تشكيل مكثف
-
+  // نستخدم alquran.cloud — بنية واضحة ونص عثماني موثوق
+  // الشكل: { data: { ayahs: [{numberInSurah: N, text: '...'}] } }
   for (let s = 1; s <= 114; s++) {
     setProgress(`جارٍ تحميل نصوص الآيات — سورة ${s} / 114`, (s / 114) * 2);
-    const url = `https://cdn.jsdelivr.net/gh/fawazahmed0/quran-api@1/editions/${QURAN_EDITION}/${s}.json`;
-    let data;
+    let records = [];
     try {
-      const res = await fetchWithRetry(url, 3);
-      data = await res.json();
-    } catch {
-      // محاولة بمصدر بديل
-      try {
-        const url2 = `https://cdn.jsdelivr.net/gh/fawazahmed0/quran-api@1/editions/ara-quranindopak/${s}.json`;
-        const res2 = await fetchWithRetry(url2, 2);
-        data = await res2.json();
-      } catch {
-        continue;
+      const url = `https://api.alquran.cloud/v1/surah/${s}/quran-simple`;
+      const res  = await fetchWithRetry(url, 3);
+      const data = await res.json();
+      const ayahs = data?.data?.ayahs || [];
+      for (const a of ayahs) {
+        const ayahNum = a.numberInSurah;
+        const text    = a.text || '';
+        if (!ayahNum) continue;
+        records.push({ id: `${s}:${ayahNum}`, surah: s, ayah: ayahNum, text });
       }
-    }
-
-    // الشكل: { chapter: N, verses: [{verse: N, text: '...'}] }
-    const verses  = data.chapter || data.verses || data.ayahs || [];
-    const records = [];
-    for (const v of verses) {
-      const ayahNum = v.verse ?? v.ayah ?? v.number ?? v.aya;
-      const text    = v.text ?? v.content ?? '';
-      if (!ayahNum) continue;
-      records.push({
-        id:    `${s}:${ayahNum}`,
-        surah: s,
-        ayah:  ayahNum,
-        text:  text,
-      });
+    } catch {
+      // مصدر بديل: tanzil عبر fawazahmed0 بالبنية الصحيحة
+      try {
+        const url2 = `https://cdn.jsdelivr.net/gh/fawazahmed0/quran-api@1/editions/ara-qurankhaledhosn/${s}.json`;
+        const res2  = await fetchWithRetry(url2, 2);
+        const data2 = await res2.json();
+        // البنية الفعلية: مصفوفة مباشرة أو { chapter: [...] }
+        const ayahs2 = Array.isArray(data2) ? data2 :
+                       Array.isArray(data2.chapter) ? data2.chapter :
+                       data2.verses || data2.ayahs || [];
+        for (const a of ayahs2) {
+          const ayahNum = a.verse ?? a.numberInSurah ?? a.ayah ?? a.number;
+          const text    = a.text ?? a.content ?? '';
+          if (!ayahNum) continue;
+          records.push({ id: `${s}:${ayahNum}`, surah: s, ayah: ayahNum, text });
+        }
+      } catch { continue; }
     }
     if (records.length) await bulkPut(STORE_AYAT, records);
   }
@@ -1404,33 +1403,40 @@ function resolveSurahName(name) {
   return null;
 }
 
-// تطبيع النص: إزالة التشكيل والحروف الخاصة للمقارنة
+// تطبيع النص: إزالة التشكيل وتوحيد الأحرف للمقارنة
 function normalizeArabic(text) {
   if (!text) return '';
   return text
-    .replace(/[ً-ٰٟ]/g, '')  // إزالة التشكيل
-    .replace(/آ|أ|إ/g, 'ا') // توحيد الألف
-    .replace(/ة/g, 'ه')            // تاء مربوطة → هاء
-    .replace(/ى/g, 'ي')            // ألف مقصورة → ياء
+    .replace(/[ً-ٟؐ-ؚٰۖ-ۭ]/g, '') // إزالة التشكيل كاملاً
+    .replace(/[آأإٱ]/g, 'ا') // توحيد الألف بأشكالها
+    .replace(/ة/g, 'ه')   // تاء مربوطة → هاء
+    .replace(/ى/g, 'ي')   // ألف مقصورة → ياء
+    .replace(/ؤ/g, 'و')   // واو بهمزة → واو
+    .replace(/ئ/g, 'ي')   // ياء بهمزة → ياء
     .replace(/\s+/g, ' ')
     .trim();
 }
 
 async function searchByKeyword(q) {
   const qNorm = normalizeArabic(q);
+  if (!qNorm || qNorm.length < 2) return null;
   return new Promise((resolve, reject) => {
     const tx  = db.transaction(STORE_AYAT, 'readonly');
     const req = tx.objectStore(STORE_AYAT).openCursor();
     let found = null;
+    let checked = 0;
     req.onsuccess = e => {
       const cursor = e.target.result;
       if (!cursor || found) {
         resolve(found);
         return;
       }
+      checked++;
       const textNorm = normalizeArabic(cursor.value.text);
       if (textNorm && textNorm.includes(qNorm)) {
         found = { surah: cursor.value.surah, ayah: cursor.value.ayah };
+        resolve(found);
+        return;
       }
       cursor.continue();
     };
@@ -1711,6 +1717,17 @@ function escHtml(s) {
 
 function escAttr(s) {
   return (s||'').replace(/'/g,"\\'");
+}
+
+// ═══════════════════════════════════════════
+//  RELOAD DATA
+// ═══════════════════════════════════════════
+async function confirmReload() {
+  if (!confirm('هل تريد إعادة تحميل بيانات التفاسير؟\nسيتطلب ذلك اتصالاً بالإنترنت.')) return;
+  // مسح علامة التحميل فقط مع الإبقاء على المفضلة
+  const tx = db.transaction(STORE_META, 'readwrite');
+  tx.objectStore(STORE_META).delete('loaded');
+  tx.oncomplete = () => location.reload();
 }
 
 // ═══════════════════════════════════════════
