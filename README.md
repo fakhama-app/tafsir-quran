@@ -1,2 +1,2 @@
-# tafsir-quran
+# bahith-tafsir
 تفسير القرآن الكريم — يعمل بدون إنترنت
