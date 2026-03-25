@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#0a0d0f">
-<meta name="description" content="مساعد البحث في تفسير القرآن الكريم — يعمل بدون إنترنت">
-<title>تفسير القرآن الكريم</title>
+<meta name="description" content="باحث التفسير — يعرض أقوال علماء أهل السنة في أمهات كتب التفسير">
+<title>باحث التفسير</title>
 <link rel="manifest" href="#" id="manifest-link">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -37,6 +37,32 @@
   --radius:    14px;
   --radius-sm: 8px;
   --shadow:    0 8px 32px rgba(0,0,0,0.5);
+  --ayah-bg:   linear-gradient(145deg, #140f00, #1a1500, #110d00);
+  --ayah-border: var(--gold-d);
+  --theme-transition: background 0.4s ease, color 0.4s ease, border-color 0.4s ease;
+}
+
+/* ═══ الوضع الصباحي ═══ */
+html.day {
+  --bg:        #f5f0e8;
+  --bg-card:   #fdf8f0;
+  --bg-card2:  #f7f0e4;
+  --bg-card3:  #f0e8d8;
+  --border:    #ddd0b8;
+  --border2:   #e8dcc8;
+  --gold:      #8b5e1a;
+  --gold-l:    #6b4510;
+  --gold-d:    #a07830;
+  --gold-xs:   #f0e4cc;
+  --text:      #2c1a00;
+  --text-m:    #7a6048;
+  --text-q:    #1a0a00;
+  --green:     #2d7a3a;
+  --red:       #c0392b;
+  --blue:      #1a5fa0;
+  --shadow:    0 4px 16px rgba(0,0,0,0.12);
+  --ayah-bg:   linear-gradient(145deg, #fdf5e0, #faf0d8, #f5ead0);
+  --ayah-border: #c9a84c;
 }
 
 html { scroll-behavior: smooth; }
@@ -49,6 +75,12 @@ body {
   min-height: 100vh;
   line-height: 1.7;
   overflow-x: hidden;
+  transition: background 0.4s ease, color 0.4s ease;
+}
+
+/* transition سلس لجميع العناصر عند تبديل الوضع */
+*, *::before, *::after {
+  transition: background-color 0.4s ease, border-color 0.4s ease, color 0.4s ease, box-shadow 0.4s ease;
 }
 
 /* Subtle background texture */
@@ -61,6 +93,12 @@ body::before {
     radial-gradient(ellipse 60% 40% at 80% 90%, rgba(88,166,255,0.02) 0%, transparent 50%);
   pointer-events: none;
   z-index: 0;
+  transition: opacity 0.4s ease;
+}
+html.day body::before {
+  background-image:
+    radial-gradient(ellipse 80% 50% at 20% 10%, rgba(139,94,26,0.06) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 90%, rgba(139,94,26,0.03) 0%, transparent 50%);
 }
 
 /* ═══════════════════════════════════════════
@@ -448,8 +486,8 @@ body::before {
 
 /* Ayah card */
 .ayah-card {
-  background: linear-gradient(145deg, #140f00, #1a1500, #110d00);
-  border: 1px solid var(--gold-d);
+  background: var(--ayah-bg);
+  border: 1px solid var(--ayah-border);
   border-radius: var(--radius);
   padding: 32px 28px;
   margin-bottom: 20px;
@@ -829,6 +867,54 @@ body::before {
 .upgrade-btn:hover { background: rgba(201,168,76,0.15); }
 
 /* ═══════════════════════════════════════════
+   THEME TOGGLE BUTTON
+═══════════════════════════════════════════ */
+.theme-toggle {
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  z-index: 100;
+  background: var(--bg-card2);
+  border: 1px solid var(--border);
+  border-radius: 30px;
+  padding: 6px 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'Noto Naskh Arabic', serif;
+  font-size: 0.75rem;
+  color: var(--text-m);
+  transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+.theme-toggle:hover {
+  border-color: var(--gold-d);
+  color: var(--gold);
+}
+.theme-toggle-icon { font-size: 1rem; }
+.theme-toggle-track {
+  width: 28px; height: 16px;
+  background: var(--border);
+  border-radius: 8px;
+  position: relative;
+  transition: background 0.3s;
+}
+html.day .theme-toggle-track { background: var(--gold-d); }
+.theme-toggle-thumb {
+  width: 12px; height: 12px;
+  background: var(--text-m);
+  border-radius: 50%;
+  position: absolute;
+  top: 2px; right: 2px;
+  transition: transform 0.3s, background 0.3s;
+}
+html.day .theme-toggle-thumb {
+  transform: translateX(-12px);
+  background: #fff;
+}
+
+/* ═══════════════════════════════════════════
    SCROLLBAR
 ═══════════════════════════════════════════ */
 ::-webkit-scrollbar { width: 5px; }
@@ -849,15 +935,23 @@ body::before {
 </head>
 
 <body>
+<!-- زر تبديل الوضع -->
+<button class="theme-toggle" onclick="toggleTheme()" title="تبديل الوضع">
+  <span class="theme-toggle-icon" id="theme-icon">☾</span>
+  <div class="theme-toggle-track">
+    <div class="theme-toggle-thumb"></div>
+  </div>
+</button>
+
 <div id="app">
 
   <!-- HEADER -->
   <div class="header">
     <div class="header-top-line"></div>
     <div class="header-bismillah">بسم الله الرحمن الرحيم</div>
-    <div class="header-title">تفسير القرآن الكريم</div>
+    <div class="header-title">باحث التفسير</div>
     <div class="header-sub">
-      يعرض ما قاله علماء أهل السنة والجماعة في أمهات الكتب المعتمدة
+      محرك بحث داخلي يعرض ما قاله علماء أهل السنة والجماعة في تفسير القرآن الكريم من أمهات الكتب
       <br>
       الطبري • ابن كثير • البغوي • القرطبي • السعدي وغيرهم
     </div>
@@ -868,7 +962,7 @@ body::before {
   <div id="setup-screen">
     <div class="setup-card">
       <div class="setup-icon">📚</div>
-      <div class="setup-title">تفسير القرآن الكريم</div>
+      <div class="setup-title">باحث التفسير</div>
       <div class="setup-desc">اختر طريقة الاستخدام</div>
 
       <!-- خيار التحميل الكامل -->
@@ -1234,6 +1328,7 @@ function upgradeToOffline() {
 //  BOOT
 // ═══════════════════════════════════════════
 async function boot() {
+  loadSavedTheme();
   db = await openDB();
 
   const favRaw   = await dbGet(STORE_USER, 'favorites');
@@ -1968,6 +2063,40 @@ async function confirmReload() {
   const tx = db.transaction(STORE_META, 'readwrite');
   tx.objectStore(STORE_META).delete('loaded');
   tx.oncomplete = () => location.reload();
+}
+
+// ═══════════════════════════════════════════
+//  THEME TOGGLE
+// ═══════════════════════════════════════════
+let currentTheme = 'night';
+
+function applyTheme(theme) {
+  currentTheme = theme;
+  const html = document.documentElement;
+  const icon = document.getElementById('theme-icon');
+  if (theme === 'day') {
+    html.classList.add('day');
+    if (icon) icon.textContent = '☀';
+    document.querySelector('meta[name="theme-color"]').content = '#f5f0e8';
+  } else {
+    html.classList.remove('day');
+    if (icon) icon.textContent = '☾';
+    document.querySelector('meta[name="theme-color"]').content = '#0a0d0f';
+  }
+}
+
+function toggleTheme() {
+  const newTheme = currentTheme === 'night' ? 'day' : 'night';
+  applyTheme(newTheme);
+  // حفظ الاختيار
+  try { localStorage.setItem('baahith_theme', newTheme); } catch {}
+}
+
+function loadSavedTheme() {
+  try {
+    const saved = localStorage.getItem('baahith_theme');
+    if (saved) applyTheme(saved);
+  } catch {}
 }
 
 // ═══════════════════════════════════════════
