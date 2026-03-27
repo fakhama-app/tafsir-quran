@@ -1684,46 +1684,42 @@ function updateSuggestionHighlight(items) {
 }
 
 async function fetchSuggestions(q) {
-  const qNorm   = normalizeArabic(q);
+  const qNorm    = normalizeArabic(q);
   const allWords = getSearchWords(q);
   if (!allWords.length) return;
 
-  // الكلمات ذات الوزن فقط — نتجاهل الشائعة في البحث
-  const weighted = allWords.filter(w => !COMMON_WORDS.has(w) && w.length >= 3);
-  // إذا كل الكلمات شائعة نستخدم الجملة كاملة
+  const weighted    = allWords.filter(w => !COMMON_WORDS.has(w) && w.length >= 3);
   const searchWords = weighted.length > 0 ? weighted : allWords;
 
-  const results = await new Promise((resolve, reject) => {
+  const candidates = await new Promise((resolve) => {
     const tx  = db.transaction(STORE_AYAT, 'readonly');
     const req = tx.objectStore(STORE_AYAT).openCursor();
-    const candidates = [];
+    const found = [];
 
     req.onsuccess = e => {
       const cursor = e.target.result;
-      if (!cursor) { resolve(candidates); return; }
+      // نجمع أفضل 30 مرشحاً ثم نرتبهم
+      if (!cursor || found.length >= 30) { resolve(found); return; }
       const text = cursor.value.text || '';
       const norm = normalizeArabic(text);
 
-      // أولاً: تطابق الجملة كاملة (الأفضل)
       let score = 0;
       if (norm.includes(qNorm)) {
         score = 100;
       } else {
-        // تطابق الكلمات المهمة
         for (const w of searchWords) {
           if (norm.includes(w)) score += 10;
         }
       }
 
       if (score > 0) {
-        candidates.push({ surah: cursor.value.surah, ayah: cursor.value.ayah, text, score });
+        found.push({ surah: cursor.value.surah, ayah: cursor.value.ayah, text, score });
       }
       cursor.continue();
     };
     req.onerror = () => resolve([]);
   });
 
-  // ترتيب حسب النقاط وأخذ أفضل 6
   const sorted = candidates
     .sort((a, b) => b.score - a.score)
     .slice(0, 6);
